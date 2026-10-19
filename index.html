@@ -37,6 +37,23 @@
 <div class="card"><h2>履歴・データ管理</h2><div class="actions"><button class="secondary" type="button" onclick="exportCSV()">CSVを書き出す</button><button class="secondary" type="button" onclick="document.getElementById('csvFile').click()">CSVを読み込む</button><input id="csvFile" type="file" accept=".csv,text/csv" hidden></div><p class="hint">CSVはNumbersやExcelでも開けます。バックアップから読み込むと既存データに追加されます。</p><div id="historyList"></div></div>
 <div class="card"><h2>データを消去</h2><p class="hint">保存済みの全記録を削除します。先にCSVバックアップを取ってください。</p><button class="danger" style="width:100%;margin-top:10px" type="button" onclick="clearAll()">全記録を削除</button></div>
 </section>
+<section class="card" id="resultMaker">
+  <h2>📸 X投稿用リザルト</h2>
+  <p class="hint">保存済みの配達記録から、黒×ネオングリーンの画像を作成するで！</p>
+  <div class="field">
+    <label for="resultRecord">リザルトにする記録</label>
+    <select id="resultRecord">
+      <option value="">記録を選択してください</option>
+    </select>
+  </div>
+  <button class="primary" type="button" onclick="generateResult()">リザルト画像を作成</button>
+  <div id="resultOutput" hidden style="margin-top:14px">
+    <img id="resultImage" alt="配達リザルト画像" style="display:block;width:100%;border-radius:12px">
+    <button class="primary" type="button" onclick="downloadResult()">画像を保存</button>
+    <p class="hint">iPhoneでは画像を長押しして保存できる場合もあるで。</p>
+  </div>
+</section>
+
 <p class="status" id="status" aria-live="polite"></p>
 </main>
 <script>
@@ -52,7 +69,7 @@ $('entryForm').addEventListener('submit',e=>{e.preventDefault();const id=$('edit
 function resetForm(){ $('entryForm').reset();$('editId').value='';$('date').value=new Date().toLocaleDateString('sv-SE');$('bonus').value='0';$('fuel').value='0';$('expenses').value='0';$('formTitle').textContent='今日の配達を記録';$('saveBtn').textContent='記録を保存';liveCalc()}
 function editRecord(id){const r=records.find(x=>x.id===id);if(!r)return;showTab('add');$('editId').value=r.id;$('date').value=r.date;$('platform').value=r.platform;$('hours').value=r.hours;$('orders').value=r.orders;$('revenue').value=r.revenue;$('bonus').value=r.bonus||0;$('odoStart').value=r.odoStart??'';$('odoEnd').value=r.odoEnd??'';$('fuel').value=r.fuel||0;$('expenses').value=r.expenses||0;$('notes').value=r.notes||'';$('formTitle').textContent='記録を編集';$('saveBtn').textContent='変更を保存';liveCalc();window.scrollTo({top:0,behavior:'smooth'})}
 function deleteRecord(id){if(!confirm('この記録を削除する？'))return;records=records.filter(r=>r.id!==id);saveStore();setStatus('記録を削除したで')}
-function renderAll(){const rev=records.reduce((s,r)=>s+Number(r.revenue||0),0),hrs=records.reduce((s,r)=>s+Number(r.hours||0),0),km=records.reduce((s,r)=>s+(distance(r)||0),0);$('sRevenue').textContent=yen(rev);$('sHours').textContent=fmt(hrs)+'h';$('sRate').textContent=hrs?yen(rev/hrs):'¥0';$('sKm').textContent=fmt(km)+'km';renderHistory()}
+function renderAll(){const rev=records.reduce((s,r)=>s+Number(r.revenue||0),0),hrs=records.reduce((s,r)=>s+Number(r.hours||0),0),km=records.reduce((s,r)=>s+(distance(r)||0),0);$('sRevenue').textContent=yen(rev);$('sHours').textContent=fmt(hrs)+'h';$('sRate').textContent=hrs?yen(rev/hrs):'¥0';$('sKm').textContent=fmt(km)+'km';renderHistory();renderResultOptions()}}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderHistory(){if(!$('historyList'))return;const root=$('historyList');if(!records.length){root.innerHTML='<div class="empty">まだ記録がないで。まずは1日分を入力しよう。</div>';return}root.innerHTML=records.map(r=>{const km=distance(r),profit=Number(r.revenue||0)-Number(r.fuel||0)-Number(r.expenses||0);return `<div class="entry"><div class="entryhead"><strong>${esc(r.date)} · ${esc(r.platform)}</strong><strong>${yen(r.revenue)}</strong></div><p>${fmt(r.hours||0)}h · ${fmt(r.orders||0)}件 · 距離 ${km===null?'未記録':fmt(km)+'km'}<br>時給 ${r.hours?yen(r.revenue/r.hours):'—'} · 経費差引 ${yen(profit)}${r.notes?'<br>メモ：'+esc(r.notes):''}</p><div class="actions"><button class="secondary" type="button" onclick="editRecord('${esc(r.id)}')">編集</button><button class="danger" type="button" onclick="deleteRecord('${esc(r.id)}')">削除</button></div></div>`}).join('')}
 function csvCell(v){const s=String(v??'');return '"'+s.replace(/"/g,'""')+'"'}
@@ -61,4 +78,90 @@ $('csvFile').addEventListener('change',async e=>{const file=e.target.files[0];if
 function parseCSV(text){const rows=[];let row=[],field='',q=false;for(let i=0;i<text.length;i++){const c=text[i];if(q){if(c==='"'&&text[i+1]==='"'){field+='"';i++}else if(c==='"')q=false;else field+=c}else{if(c==='"')q=true;else if(c===','){row.push(field);field=''}else if(c==='\n'){row.push(field.replace(/\r$/,''));rows.push(row);row=[];field=''}else field+=c}}if(field.length||row.length){row.push(field.replace(/\r$/,''));rows.push(row)}return rows}
 function clearAll(){if(!confirm('本当に全記録を削除する？この操作は取り消せません。'))return;records=[];saveStore();setStatus('全記録を削除したで')}
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});resetForm();renderAll();
+
+function renderResultOptions(){
+  const select = document.getElementById('resultRecord');
+  if(!select) return;
+  const previous = select.value;
+  select.innerHTML = '<option value="">記録を選択してください</option>';
+  [...records].sort((a,b)=>b.date.localeCompare(a.date)).forEach(r=>{
+    const option = document.createElement('option');
+    option.value = String(r.id);
+    option.textContent = `${r.date}・${r.platform}・${yen(r.revenue)}`;
+    select.appendChild(option);
+  });
+  if([...select.options].some(o=>o.value===previous)) select.value=previous;
+}
+
+function generateResult(){
+  const id = document.getElementById('resultRecord').value;
+  const r = records.find(x=>String(x.id)===id);
+  if(!r){alert('先に記録を選択してな！');return;}
+
+  const canvas=document.createElement('canvas');
+  canvas.width=1200;
+  canvas.height=675;
+  const c=canvas.getContext('2d');
+
+  c.fillStyle='#080d0b';
+  c.fillRect(0,0,1200,675);
+
+  c.strokeStyle='#45ff9a';
+  c.lineWidth=3;
+  c.strokeRect(24,24,1152,627);
+
+  c.fillStyle='#45ff9a';
+  c.font='bold 30px sans-serif';
+  c.fillText('DELIVERY RESULT',65,85);
+
+  c.fillStyle='#ffffff';
+  c.font='26px sans-serif';
+  c.fillText(`${r.date}  |  ${r.platform||'FOOD DELIVERY'}`,65,132);
+
+  c.fillStyle='#8a9990';
+  c.font='22px sans-serif';
+  c.fillText('TOTAL REVENUE',65,205);
+
+  c.fillStyle='#45ff9a';
+  c.font='bold 88px sans-serif';
+  c.fillText(yen(r.revenue),65,300);
+
+  const cards=[
+    {x:65,label:'DELIVERIES',value:`${r.orders||0} 件`},
+    {x:435,label:'WORKING TIME',value:`${fmt(r.hours||0)} 時間`},
+    {x:805,label:'HOURLY RATE',value:yen(r.hours>0?(r.revenue||0)/r.hours:0)}
+  ];
+
+  cards.forEach(item=>{
+    c.fillStyle='#111b15';
+    c.fillRect(item.x,370,330,145);
+    c.strokeStyle='#28784c';
+    c.lineWidth=2;
+    c.strokeRect(item.x,370,330,145);
+    c.fillStyle='#8a9990';
+    c.font='20px sans-serif';
+    c.fillText(item.label,item.x+22,412);
+    c.fillStyle='#ffffff';
+    c.font='bold 35px sans-serif';
+    c.fillText(item.value,item.x+22,470);
+  });
+
+  c.fillStyle='#8a9990';
+  c.font='18px sans-serif';
+  c.fillText('MY DELIVERY LOG',65,590);
+  c.fillStyle='#45ff9a';
+  c.fillRect(65,610,1070,4);
+
+  document.getElementById('resultImage').src=canvas.toDataURL('image/png');
+  document.getElementById('resultOutput').hidden=false;
+}
+
+function downloadResult(){
+  const img=document.getElementById('resultImage');
+  if(!img.src){alert('先に画像を作成してな！');return;}
+  const a=document.createElement('a');
+  a.href=img.src;
+  a.download='delivery-result.png';
+  a.click();
+}
 </script></body></html>
